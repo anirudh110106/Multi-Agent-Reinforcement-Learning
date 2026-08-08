@@ -6,7 +6,7 @@ from statistics import mean, stdev
 from typing import Any
 from rich import print
 
-from CybORG import CybORG
+from CybORG import CybORGw
 from CybORG.Agents import SleepAgent, EnterpriseGreenAgent, FiniteStateRedAgent
 from CybORG.Simulator.Scenarios import EnterpriseScenarioGenerator
 from CybORG.Agents.Wrappers import BaseWrapper, BlueFlatWrapper, BlueFixedActionWrapper, EnterpriseMAE

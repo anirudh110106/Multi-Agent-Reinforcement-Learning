@@ -96,7 +96,7 @@ LOG_DIR = "evaluation/attention_test_curriculum"
 SEED = 42
 # PPO Training
 
-UPDATE_EPOCHS = 10
+UPDATE_EPOCHS = 5
 MINIBATCH_SIZE = 256
 
 VALUE_LOSS_COEF = 0.5
