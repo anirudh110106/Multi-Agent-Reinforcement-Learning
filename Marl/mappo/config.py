@@ -42,7 +42,7 @@ ACTION_DIM = LARGE_ACTION_DIM
 # ==========================================================
 # MAPPO Hyperparameters
 # ==========================================================
-TOTAL_EPISODES = 500
+TOTAL_EPISODES = 1000
 
 
 ROLLOUT_STEPS = 512
@@ -55,17 +55,11 @@ ACTOR_LEARNING_RATE = 1e-4
 CRITIC_LEARNING_RATE = 5e-5
 
 
-
 GAMMA = 0.99
-
 GAE_LAMBDA = 0.95
-
 PPO_CLIP = 0.2
-
 VALUE_LOSS_COEF = 0.5
-
 ENTROPY_COEF = 0.01
-
 MAX_GRAD_NORM = 0.5
 
 
@@ -85,8 +79,8 @@ DEVICE = "cuda"
 PRINT_EVERY = 10
 SAVE_EVERY = 500
 
-CHECKPOINT_DIR = "checkpoints/attention_test_curriculum"
-LOG_DIR = "evaluation/attention_test_curriculum"
+CHECKPOINT_DIR = "checkpoints/gnn_attention_newMappo"
+LOG_DIR = "evaluation/gnn_attention_newMappo"
 
 
 # ==========================================================
@@ -95,17 +89,12 @@ LOG_DIR = "evaluation/attention_test_curriculum"
 
 SEED = 42
 # PPO Training
-
 UPDATE_EPOCHS = 5
 MINIBATCH_SIZE = 256
-
 VALUE_LOSS_COEF = 0.5
 ENTROPY_COEF = 0.01
-
 PPO_CLIP = 0.2
-
 MAX_GRAD_NORM = 0.5
-
 # Add these
 VALUE_CLIP = True #(was false)          # Optional value clipping
 NORMALIZE_ADVANTAGES = True # Standard MAPPO practice
@@ -126,10 +115,10 @@ CURRICULUM_SWITCH_EPISODE = 200
 
 
 CURRICULUM_SCHEDULE = [
-    (50, 0.10),   # 80% Random, 20% Finite
-    (200, 0.40),   # 60% Random, 40% Finite
-    (350, 0.80),   # 40% Random, 60% Finite
-    (500, 1.00),   # 20% Random, 80% Finite
+    (100, 0.10),   # 80% Random, 20% Finite
+    (300, 0.40),   # 60% Random, 40% Finite
+    (700, 0.80),   # 40% Random, 60% Finite
+    (1000, 1.00),   # 20% Random, 80% Finite
     (10000, 1.00),  # 100% Finite
 ]
 

@@ -60,7 +60,7 @@ import torch.nn.functional as F
 
 from torch.distributions import Categorical
 
-from .network_attention import MAPPOModel, COMMUNICATION_DIM
+from .gnn_attention import MAPPOModel, COMMUNICATION_DIM
 
 from .value_norm import ValueNorm
 

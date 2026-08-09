@@ -40,7 +40,7 @@ from .config import (
     GAE_LAMBDA,
 )
 
-from .network_attention import COMMUNICATION_DIM
+from .gnn_attention import COMMUNICATION_DIM
 
 
 class MAPPOBuffer:

@@ -732,7 +732,7 @@ def train():
     plt.xlabel("PPO Update")
     plt.ylabel("Entropy")
     plt.grid()
-    plt.savefig("evaluation/entropy.png")
+    plt.savefig("LOG_DIR/entropy.png")
 
 
 if __name__ == "__main__":

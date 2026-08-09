@@ -888,15 +888,14 @@ class SharedActor(nn.Module):
                     "must contain the same number of senders."
                 )
 
-            # Convert trust into attention bias.
-            #
-            # Higher trust:
-            #     less penalty
-            #
-            # Lower trust:
-            #     stronger penalty
-            #
-            # log(trust) is a natural attention bias.
+
+
+
+
+# here , remove / comment below to disable or enable trust :-
+
+
+            
             trust_safe = torch.clamp(
                 trust,
                 min=1e-4,
@@ -907,9 +906,6 @@ class SharedActor(nn.Module):
                 trust_safe
             )
 
-            # MultiheadAttention supports key_padding_mask,
-            # but that is binary. We therefore apply trust to
-            # values directly as well.
             values = (
                 values
                 * trust_safe.unsqueeze(-1)
