@@ -1434,7 +1434,6 @@ class MAPPOModel(nn.Module):
 
             [batch, NUM_AGENTS]
         """
-
         return self.critic(
             global_state
         )

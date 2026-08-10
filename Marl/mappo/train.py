@@ -384,10 +384,15 @@ def train():
     # Runtime communication state
     ########################################################
 
+    # previous_messages = None
+    # previous_obs_array = None
+
     previous_messages = None
     previous_obs_array = None
 
-
+    previous_field_ids = None
+    previous_comm_log_probs = None
+    previous_comm_entropies = None
 
     episode_return = np.zeros(NUM_AGENTS, dtype=np.float32)
     episode_returns_log = []
@@ -565,7 +570,37 @@ def train():
         communication_source = (
             previous_obs_array
             if previous_obs_array is not None
-            else np.zeros((NUM_AGENTS, OBS_DIM), dtype=np.float32)
+            else np.zeros(
+                (NUM_AGENTS, OBS_DIM),
+                dtype=np.float32,
+            )
+        )
+
+        stored_field_ids = (
+            previous_field_ids
+            if previous_field_ids is not None
+            else np.zeros(
+                (NUM_AGENTS, 7),
+                dtype=np.int64,
+            )
+        )
+
+        stored_comm_log_probs = (
+            previous_comm_log_probs
+            if previous_comm_log_probs is not None
+            else np.zeros(
+                (NUM_AGENTS, 7),
+                dtype=np.float32,
+            )
+        )
+
+        stored_comm_entropies = (
+            previous_comm_entropies
+            if previous_comm_entropies is not None
+            else np.zeros(
+                (NUM_AGENTS, 7),
+                dtype=np.float32,
+            )
         )
 
         buffer.store(
@@ -579,21 +614,29 @@ def train():
             action_masks=masks_arr,
             received_messages=current_received_messages,
             trust_weights=current_trust_weights,
-            communication_source_obs=communication_source,
-            communication_valid=(previous_obs_array is not None),
 
-            communication_field_ids=communication_field_ids,
-            communication_log_probs=communication_log_probs,
-            communication_entropies=communication_entropies,
+            communication_source_obs=communication_source,
+            communication_valid=(
+                previous_obs_array is not None
+            ),
+
+            communication_field_ids=stored_field_ids,
+            communication_log_probs=stored_comm_log_probs,
+            communication_entropies=stored_comm_entropies,
         )
 
         ####################################################
         # Newly generated messages/obs become available at t+1
         ####################################################
 
+        # previous_messages = outgoing_vectors.detach()
+        # previous_obs_array = obs_array
         previous_messages = outgoing_vectors.detach()
         previous_obs_array = obs_array
 
+        previous_field_ids = communication_field_ids
+        previous_comm_log_probs = communication_log_probs
+        previous_comm_entropies = communication_entropies
         ####################################################
         # Update evaluator state
         ####################################################
@@ -646,8 +689,13 @@ def train():
             # episode.
             # ------------------------------------------------
 
-            previous_messages = None
-            previous_obs_array = None
+            # previous_messages = None
+            # previous_obs_array = None
+
+            # obs_dict, info = env.reset(seed=SEED + episode_count)
+            previous_field_ids = None
+            previous_comm_log_probs = None
+            previous_comm_entropies = None
 
             obs_dict, info = env.reset(seed=SEED + episode_count)
             previous_info = info

@@ -1304,7 +1304,7 @@ class MAPPO:
             communication_entropy = torch.stack(
                 list(message_entropies.values()),
                 dim=-1,
-            ).sum(dim=-1)
+            ).mean(dim=-1)
 
             communication_log_probs = (
                 communication_log_probs.reshape(
