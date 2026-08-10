@@ -88,8 +88,6 @@ import os
 
 import numpy as np
 import torch
-from torch.distributions import Categorical
-
 from .env import CC4Env
 from .mappo import MAPPO
 
@@ -120,6 +118,93 @@ RED_AGENTS = {
     "random": RandomSelectRedAgent,
     "finite": FiniteStateRedAgent,
 }
+
+
+# ==========================================================
+# Checkpoint architecture helper
+# ==========================================================
+
+def get_checkpoint_num_targets(checkpoint_path):
+    """
+    Read the communication target vocabulary size directly from
+    the saved MAPPO model.
+
+    The checkpoint is authoritative for model construction because
+    the decoder target_head and encoder target_embedding were created
+    with the target count that existed when the model was trained.
+
+    Current MAPPO checkpoints are saved as:
+
+        {
+            "model": model.state_dict(),
+            ...
+        }
+
+    Returns
+    -------
+    int or None
+        Number of communication targets stored in the checkpoint.
+
+    Why this is needed
+    ------------------
+    CC4Env.get_num_targets() can differ depending on the environment
+    instance/scenario used during evaluation. Constructing MAPPO from
+    the current environment's count can therefore produce, for example:
+
+        checkpoint: 94 targets
+        evaluation env: 95 targets
+
+    which causes a state_dict size mismatch in:
+
+        actor.communication.decoder.target_head
+        actor.communication.encoder.target_embedding
+    """
+
+    checkpoint = torch.load(
+        checkpoint_path,
+        map_location="cpu",
+    )
+
+    if not isinstance(checkpoint, dict):
+        raise RuntimeError(
+            "Unexpected checkpoint format. Expected a dictionary "
+            f"but got {type(checkpoint).__name__}."
+        )
+
+    model_state = checkpoint.get("model")
+
+    if model_state is None:
+        raise RuntimeError(
+            "Checkpoint does not contain a 'model' state_dict. "
+            "Cannot determine the communication target vocabulary."
+        )
+
+    target_weight = (
+        model_state.get(
+            "actor.communication.decoder.target_head.weight"
+        )
+    )
+
+    if target_weight is None:
+        # Checkpoint has no target head. This can happen for an older
+        # communication configuration. The caller can fall back to
+        # the current environment's target count.
+        return None
+
+    if target_weight.ndim != 2:
+        raise RuntimeError(
+            "Unexpected target_head.weight shape: "
+            f"{tuple(target_weight.shape)}."
+        )
+
+    num_targets = int(target_weight.shape[0])
+
+    if num_targets <= 0:
+        raise RuntimeError(
+            f"Invalid checkpoint target count: {num_targets}"
+        )
+
+    return num_targets
 
 
 # ==========================================================
@@ -491,15 +576,29 @@ def run_episodes(
             # It becomes available at timestep t+1.
             # ==================================================
 
-            outgoing_vectors = (
-                ppo.get_outgoing_messages(
-                    obs_array,
-                    return_decoded=False,
-                )
+            (
+                outgoing_vectors,
+                _communication_field_ids,
+                _communication_log_probs,
+                _communication_entropies,
+            ) = ppo.get_outgoing_messages(
+                obs_array,
+                return_decoded=False,
             )
 
             # --------------------------------------------------
             # Safety conversion
+            #
+            # MAPPO.get_outgoing_messages() returns:
+            #
+            #     messages
+            #     field_ids
+            #     log_probs
+            #     entropies
+            #
+            # Evaluation only needs the communication vectors.
+            # The other three outputs are used during PPO training
+            # and are intentionally ignored here.
             # --------------------------------------------------
 
             if not isinstance(
@@ -513,6 +612,29 @@ def run_episodes(
                         dtype=torch.float32,
                         device=ppo.device,
                     )
+                )
+            else:
+
+                outgoing_vectors = (
+                    outgoing_vectors.to(
+                        device=ppo.device,
+                        dtype=torch.float32,
+                    )
+                )
+
+            if outgoing_vectors.ndim != 2:
+                raise RuntimeError(
+                    "MAPPO returned communication vectors with "
+                    "unexpected shape: "
+                    f"{tuple(outgoing_vectors.shape)}. "
+                    "Expected [NUM_AGENTS, COMMUNICATION_DIM]."
+                )
+
+            if outgoing_vectors.shape[0] != NUM_AGENTS:
+                raise RuntimeError(
+                    "MAPPO returned the wrong number of "
+                    f"communication vectors: expected {NUM_AGENTS}, "
+                    f"got {outgoing_vectors.shape[0]}."
                 )
 
             previous_messages = (
@@ -623,28 +745,94 @@ def evaluate_checkpoint(
     print("=" * 72)
 
     # ------------------------------------------------------
-    # Build environment first.
+    # Determine communication target vocabulary.
     #
-    # Current MAPPO requires num_targets during construction.
+    # IMPORTANT:
+    # The checkpoint is authoritative here.
+    #
+    # The model's decoder/encoder were built with the target
+    # vocabulary that existed during training. We must construct
+    # MAPPO with that SAME number before calling ppo.load().
+    #
+    # Previously this was taken from a fresh evaluation environment,
+    # which produced 95 while the checkpoint contained 94.
     # ------------------------------------------------------
 
-    reference_env = CC4Env(
-        red_agent_class=RED_AGENTS[
-            red_agent_names[0]
-        ],
+    checkpoint_num_targets = (
+        get_checkpoint_num_targets(
+            checkpoint_path
+        )
     )
 
-    num_targets = (
-        reference_env.get_num_targets()
-    )
+    # Fall back only for old checkpoints that do not contain a
+    # target_head at all.
+    if checkpoint_num_targets is None:
+
+        reference_env = CC4Env(
+            red_agent_class=RED_AGENTS[
+                red_agent_names[0]
+            ],
+        )
+
+        num_targets = (
+            reference_env.get_num_targets()
+        )
+
+        print(
+            "[MAPPO] Checkpoint has no target_head; "
+            "using current environment target count."
+        )
+
+    else:
+
+        num_targets = checkpoint_num_targets
 
     print(
-        f"[MAPPO] Communication target count: "
+        f"[MAPPO] Checkpoint communication target count: "
         f"{num_targets}"
     )
 
     # ------------------------------------------------------
-    # Construct current MAPPO architecture
+    # Diagnostic: compare against each evaluation environment.
+    #
+    # This does NOT change the model architecture. It only tells us
+    # whether the current CC4 scenario has the same host vocabulary
+    # size as the one used to train the checkpoint.
+    # ------------------------------------------------------
+
+    for red_name in red_agent_names:
+
+        env_target_count = (
+            CC4Env(
+                red_agent_class=RED_AGENTS[
+                    red_name
+                ],
+            ).get_num_targets()
+        )
+
+        if env_target_count != num_targets:
+
+            print(
+                f"[WARNING] {red_name} environment reports "
+                f"{env_target_count} targets, but the checkpoint "
+                f"was trained with {num_targets}."
+            )
+
+            print(
+                "          The checkpoint will load correctly, "
+                "but target-ID semantics must match the training "
+                "host ordering for communication evaluation."
+            )
+
+        else:
+
+            print(
+                f"[MAPPO] {red_name} environment target count: "
+                f"{env_target_count} (matches checkpoint)"
+            )
+
+    # ------------------------------------------------------
+    # Construct the SAME MAPPO architecture used by the checkpoint
     # ------------------------------------------------------
 
     ppo = MAPPO(
