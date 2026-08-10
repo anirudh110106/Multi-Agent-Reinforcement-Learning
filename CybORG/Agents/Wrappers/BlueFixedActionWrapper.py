@@ -156,6 +156,8 @@ class BlueFixedActionWrapper(BaseWrapper):
         obs, rews, dones, info = self.env.parallel_step(
             action_dict, messages=messages, **kwargs
         )
+        for agent_name in self.possible_agents:
+            self._populate_action_space(agent_name)
 
         for agent_name in self.agents:
             if agent_name not in info:

@@ -112,14 +112,6 @@ def pad_observation(obs, real_dim):
     padded[:real_dim] = obs
     return padded
 
-
-def build_action_mask(real_action_dim):
-
-    mask = np.zeros(ACTION_DIM, dtype=bool)
-    mask[:real_action_dim] = True
-    return mask
-
-
 ############################################################
 # Episode boundary helper
 ############################################################
@@ -346,11 +338,6 @@ def train():
     obs_dims = env.get_observation_dims()
     action_dims = env.get_action_dims()
 
-    action_masks = {
-        name: build_action_mask(action_dims[name])
-        for name in agent_names
-    }
-
     ########################################################
     # Initial reset
     ########################################################
@@ -457,12 +444,16 @@ def train():
         actions_dict = {}
         actions_arr = np.zeros(NUM_AGENTS, dtype=np.int64)
         log_probs_arr = np.zeros(NUM_AGENTS, dtype=np.float32)
-        values_arr = np.zeros(NUM_AGENTS, dtype=np.float32)
+        values_arr = np.zeros(NUM_AGENTS
+        , dtype=np.float32)
         masks_arr = np.zeros((NUM_AGENTS, ACTION_DIM), dtype=bool)
 
         for i, name in enumerate(agent_names):
 
-            mask = action_masks[name]
+            mask = np.asarray(info[name]["action_mask"], dtype=bool)
+            padded_mask = np.zeros(ACTION_DIM, dtype=bool)
+            padded_mask[:len(mask)] = mask
+            mask = padded_mask
             masks_arr[i] = mask
 
             ################################################

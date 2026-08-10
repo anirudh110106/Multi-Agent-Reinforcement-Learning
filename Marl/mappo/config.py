@@ -42,7 +42,7 @@ ACTION_DIM = LARGE_ACTION_DIM
 # ==========================================================
 # MAPPO Hyperparameters
 # ==========================================================
-TOTAL_EPISODES = 1000
+TOTAL_EPISODES = 2
 
 
 ROLLOUT_STEPS = 512
@@ -79,8 +79,8 @@ DEVICE = "cuda"
 PRINT_EVERY = 10
 SAVE_EVERY = 500
 
-CHECKPOINT_DIR = "checkpoints/gnn_attention_newMappo"
-LOG_DIR = "evaluation/gnn_attention_newMappo"
+CHECKPOINT_DIR = "checkpoints/gnn_attention_AAM_newMappo"
+LOG_DIR = "evaluation/gnn_attention_AAM_newMappo"
 
 
 # ==========================================================
