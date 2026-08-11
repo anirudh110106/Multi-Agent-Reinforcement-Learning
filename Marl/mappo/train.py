@@ -747,7 +747,7 @@ def train():
     plt.xlabel("Episode")
     plt.ylabel("Return")
     plt.grid()
-    plt.savefig("evaluation/episode_return.png")
+    plt.savefig(os.path.join(LOG_DIR, "episode_return.png"))
 
     plt.figure(figsize=(10, 5))
     plt.plot(actor_loss_history)
@@ -755,7 +755,7 @@ def train():
     plt.xlabel("PPO Update")
     plt.ylabel("Loss")
     plt.grid()
-    plt.savefig("evaluation/actor_loss.png")
+    plt.savefig(os.path.join(LOG_DIR, "actor_loss.png"))
 
     plt.figure(figsize=(10, 5))
     plt.plot(critic_loss_history)
@@ -763,7 +763,7 @@ def train():
     plt.xlabel("PPO Update")
     plt.ylabel("Loss")
     plt.grid()
-    plt.savefig("evaluation/critic_loss.png")
+    plt.savefig(os.path.join(LOG_DIR, "critic_loss.png"))
 
     plt.figure(figsize=(10, 5))
     plt.plot(entropy_history)
@@ -771,7 +771,7 @@ def train():
     plt.xlabel("PPO Update")
     plt.ylabel("Entropy")
     plt.grid()
-    plt.savefig("evaluation/entropy.png")
+    plt.savefig(os.path.join(LOG_DIR, "entropy.png"))
 
 
 if __name__ == "__main__":

@@ -42,7 +42,7 @@ ACTION_DIM = LARGE_ACTION_DIM
 # ==========================================================
 # MAPPO Hyperparameters
 # ==========================================================
-TOTAL_EPISODES = 2
+TOTAL_EPISODES = 1000  
 
 
 ROLLOUT_STEPS = 512
