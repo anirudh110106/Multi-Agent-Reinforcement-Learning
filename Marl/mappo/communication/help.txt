@@ -1,0 +1,74 @@
+communication/
+│
+├── __init__.py
+│
+├── schema.py
+│
+├── decoder.py
+│
+├── encoder.py
+│
+├── trust.py
+│
+├── structured_communication.py
+│
+└── config.py     
+
+               Our MARL
+                       │
+                       ▼
+              BlueEnterpriseWrapper
+                       │
+                       ▼
+                BlueFlatWrapper
+                       │
+                       ▼
+             BlueFixedActionWrapper
+                       │
+                       ▼
+                  CybORG
+
+
+                 ┌──────────────────┐
+                 │   Blue Agent A   │
+                 └────────┬─────────┘
+                          │
+                    observation
+                          │
+                          ▼
+                    Agent Encoder
+                          │
+                          ▼
+                    latent vector
+                          │
+                          ▼
+                 Message Decoder
+                          │
+                          ▼
+                Structured Message
+                          │
+                          ▼
+                  Message Encoder
+                          │
+                          ▼
+                 Communication Vector
+                          │
+                          ▼
+                ┌──────────────────┐
+                │  Agent B         │
+                │                  │
+                │  Trust Module    │◄── history/outcomes
+                └────────┬─────────┘
+                         │
+                    trust score
+                         │
+                         ▼
+                Communication Attention
+                         │
+                         ▼
+                  Policy Network
+                         │
+                         ▼
+                       Action
+
+
