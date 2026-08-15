@@ -59,6 +59,7 @@ from .env import CC4Env
 from .buffer import MAPPOBuffer
 from .mappo import MAPPO
 from .communication.evaluator import MessageEvaluator
+from .action_mask import compute_padded_mask
 
 from CybORG.Agents import (
     SleepAgent,  # not using bhai
@@ -338,6 +339,13 @@ def train():
     obs_dims = env.get_observation_dims()
     action_dims = env.get_action_dims()
 
+<<<<<<< HEAD
+=======
+    # Adaptive Action Mask replaces the old static per-episode mask
+    # (see action_mask.py). Masks are now computed fresh every
+    # timestep inside the rollout loop below via compute_padded_mask().
+
+>>>>>>> 097f077 (added AAM)
     ########################################################
     # Initial reset
     ########################################################
@@ -450,10 +458,7 @@ def train():
 
         for i, name in enumerate(agent_names):
 
-            mask = np.asarray(info[name]["action_mask"], dtype=bool)
-            padded_mask = np.zeros(ACTION_DIM, dtype=bool)
-            padded_mask[:len(mask)] = mask
-            mask = padded_mask
+            mask = compute_padded_mask(env, name)
             masks_arr[i] = mask
 
             ################################################

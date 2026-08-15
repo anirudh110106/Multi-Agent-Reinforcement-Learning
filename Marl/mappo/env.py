@@ -159,6 +159,117 @@ class CC4Env:
         return dims
 
     ############################################################
+    # Passthrough: action-space introspection
+    #
+    # Needed by action_mask.py to build the Adaptive Action Mask
+    # without any file outside env.py touching CybORG directly.
+    ############################################################
+
+    def action_mask(self, agent_name):
+        """
+        Structural validity mask for `agent_name`, as maintained by
+        CybORG's BlueFixedActionWrapper.
+
+        True  -> action at this index currently targets a real
+                 host/subnet that exists this episode.
+        False -> action is a padding/no-op placeholder (e.g. the
+                 target host was not generated this episode).
+
+        This is recomputed by CybORG at every env.reset() (see
+        BlueFixedActionWrapper._populate_action_space), so it is
+        already episode-fresh -- it does NOT change mid-episode.
+        """
+
+        return self.env.action_mask(agent_name)
+
+    def action_labels(self, agent_name):
+        """Human-readable label per action index (for logging/debugging)."""
+
+        return self.env.action_labels(agent_name)
+
+    def actions(self, agent_name):
+        """Ordered list of the underlying CybORG Action objects."""
+
+        return self.env.actions(agent_name)
+
+    ############################################################
+    # Live, agent-legitimate signals for the Adaptive Action Mask
+    #
+    # Both of the following are re-derived directly from CybORG's
+    # host-event log -- the SAME event data BlueFlatWrapper.observation_change
+    # projects into `malicious_processes` / `network_connections` in the
+    # agent's own observation vector. This is NOT privileged red-team
+    # ground truth (unlike get_ground_truth() below, which is only used
+    # for trust supervision) -- it is exactly what the agent already
+    # "sees", just re-read here instead of re-parsed out of a padded,
+    # per-subnet-flattened observation array.
+    ############################################################
+
+    def get_host_alert_flags(self, agent_name):
+        """
+        Return {hostname: bool} for every host this agent's action space
+        can target (routers excluded, they are never action targets).
+
+        True means the host currently has an outstanding malicious-process
+        or suspicious-network-connection event -- i.e. it is currently
+        "flagged" from the agent's own point of view.
+        """
+
+        state = self.cyborg.environment_controller.state
+
+        flags = {}
+
+        for hostname in self.env.hosts(agent_name):
+
+            if "router" in hostname:
+                continue
+
+            if hostname not in state.hosts:
+                flags[hostname] = False
+                continue
+
+            events = state.hosts[hostname].events
+
+            has_process_event = bool(
+                events.old_process_creation or events.process_creation
+            )
+
+            has_connection_event = bool(
+                events.old_network_connections or events.network_connections
+            )
+
+            flags[hostname] = has_process_event or has_connection_event
+
+        return flags
+
+    def get_zone_alert_flags(self, agent_name):
+        """
+        Return {subnet_name: bool}: True if ANY host in that subnet is
+        currently flagged (see get_host_alert_flags). Used to gate
+        BlockTrafficZone so an agent cannot cut off a zone with no
+        observed malicious activity.
+        """
+
+        state = self.cyborg.environment_controller.state
+
+        host_flags = self.get_host_alert_flags(agent_name)
+
+        zone_flags = {}
+
+        for hostname, flagged in host_flags.items():
+
+            subnet = state.hostname_subnet_map.get(hostname)
+
+            if subnet is None:
+                continue
+
+            subnet = str(subnet).lower()
+
+            zone_flags[subnet] = zone_flags.get(subnet, False) or flagged
+
+        return zone_flags
+
+    ############################################################
     # Ground truth for MessageEvaluator / DynamicTrust
     ############################################################
 
