@@ -93,9 +93,9 @@ from .mappo import MAPPO
 
 from .train import (
     pad_observation,
-    build_action_mask,
     episode_is_done,
 )
+from .action_mask import compute_padded_mask
 
 from .config import (
     NUM_AGENTS,
@@ -413,12 +413,9 @@ def run_episodes(
         env.get_action_dims()
     )
 
-    action_masks = {
-        name: build_action_mask(
-            action_dims[name]
-        )
-        for name in agent_names
-    }
+    # Adaptive Action Mask replaces the old static per-episode mask.
+    # Masks are computed fresh every timestep inside the episode loop
+    # below via compute_padded_mask() -- see action_mask.py.
 
     # ------------------------------------------------------
     # Results
@@ -530,7 +527,7 @@ def run_episodes(
                 # Agent-specific action mask
                 # --------------------------------------------------
 
-                mask = action_masks[name]
+                mask = compute_padded_mask(env, name)
 
                 # --------------------------------------------------
                 # Choose action
