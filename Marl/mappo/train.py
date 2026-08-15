@@ -339,13 +339,10 @@ def train():
     obs_dims = env.get_observation_dims()
     action_dims = env.get_action_dims()
 
-<<<<<<< HEAD
-=======
     # Adaptive Action Mask replaces the old static per-episode mask
     # (see action_mask.py). Masks are now computed fresh every
     # timestep inside the rollout loop below via compute_padded_mask().
 
->>>>>>> 097f077 (added AAM)
     ########################################################
     # Initial reset
     ########################################################
