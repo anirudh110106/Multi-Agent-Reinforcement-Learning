@@ -118,7 +118,7 @@ CURRICULUM_SCHEDULE = [
     (100, 0.10),   # 80% Random, 20% Finite
     (300, 0.40),   # 60% Random, 40% Finite
     (700, 0.80),   # 40% Random, 60% Finite
-    (1000, 1.00),   # 20% Random, 80% Finite
+    (1000, 1.00),   # 100% Finite
     (10000, 1.00),  # 100% Finite
 ]
 
