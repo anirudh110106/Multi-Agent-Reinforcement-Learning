@@ -484,40 +484,49 @@ class MAPPOBuffer:
 
     def get_batches(self):
 
+        if self.ptr == 0:
+
+            raise RuntimeError(
+                "MAPPOBuffer.get_batches() called on an empty buffer -- "
+                "nothing has been stored since the last clear()."
+            )
+
+        n = self.ptr
+
         return {
 
             "obs":
-                torch.tensor(self.obs, dtype=torch.float32, device=DEVICE),
+                torch.tensor(self.obs[:n], dtype=torch.float32, device=DEVICE),
 
             "global_obs":
-                torch.tensor(self.global_obs, dtype=torch.float32, device=DEVICE),
+                torch.tensor(self.global_obs[:n], dtype=torch.float32, device=DEVICE),
 
             "actions":
-                torch.tensor(self.actions, dtype=torch.long, device=DEVICE),
+                torch.tensor(self.actions[:n], dtype=torch.long, device=DEVICE),
 
             "log_probs":
-                torch.tensor(self.log_probs, dtype=torch.float32, device=DEVICE),
+                torch.tensor(self.log_probs[:n], dtype=torch.float32, device=DEVICE),
 
             "returns":
-                torch.tensor(self.returns, dtype=torch.float32, device=DEVICE),
+                torch.tensor(self.returns[:n], dtype=torch.float32, device=DEVICE),
 
             "advantages":
-                torch.tensor(self.advantages, dtype=torch.float32, device=DEVICE),
+                torch.tensor(self.advantages[:n], dtype=torch.float32, device=DEVICE),
 
             "values":
-                torch.tensor(self.values, dtype=torch.float32, device=DEVICE),
+                torch.tensor(self.values[:n], dtype=torch.float32, device=DEVICE),
 
             "action_masks":
-                torch.tensor(self.action_masks, dtype=torch.bool, device=DEVICE),
+                torch.tensor(self.action_masks[:n], dtype=torch.bool, device=DEVICE),
 
             "received_messages":
                 torch.tensor(
-                    self.received_messages, dtype=torch.float32, device=DEVICE
+                    self.received_messages[:n], dtype=torch.float32, device=DEVICE
                 ),
 
             "trust_weights":
                 torch.tensor(
-                    self.trust_weights, dtype=torch.float32, device=DEVICE
+                    self.trust_weights[:n], dtype=torch.float32, device=DEVICE
                 ),
 
             # ======================================================
@@ -526,14 +535,14 @@ class MAPPOBuffer:
 
             "communication_source_obs":
                 torch.tensor(
-                    self.communication_source_obs,
+                    self.communication_source_obs[:n],
                     dtype=torch.float32,
                     device=DEVICE,
                 ),
 
             "communication_valid":
                 torch.tensor(
-                    self.communication_valid,
+                    self.communication_valid[:n],
                     dtype=torch.bool,
                     device=DEVICE,
                 ),
@@ -544,21 +553,21 @@ class MAPPOBuffer:
 
             "communication_field_ids":
                 torch.tensor(
-                    self.communication_field_ids,
+                    self.communication_field_ids[:n],
                     dtype=torch.long,
                     device=DEVICE,
                 ),
 
             "communication_log_probs":
                 torch.tensor(
-                    self.communication_log_probs,
+                    self.communication_log_probs[:n],
                     dtype=torch.float32,
                     device=DEVICE,
                 ),
 
             "communication_entropies":
                 torch.tensor(
-                    self.communication_entropies,
+                    self.communication_entropies[:n],
                     dtype=torch.float32,
                     device=DEVICE,
                 ),
