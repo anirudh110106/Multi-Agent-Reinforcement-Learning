@@ -61,6 +61,13 @@ from .mappo import MAPPO
 from .communication.evaluator import MessageEvaluator
 from .action_mask import compute_padded_mask
 
+from .gnn_attention import (
+    MISSION_DIM,
+    SUBNET_BLOCK_DIM,
+    MESSAGE_DIM,
+    NUM_HQ_SUBNETS,
+)
+
 from CybORG.Agents import (
     SleepAgent,  # not using bhai
     RandomSelectRedAgent,
@@ -80,7 +87,6 @@ from .config import (
     SAVE_EVERY,
     CHECKPOINT_DIR,
     LOG_DIR,
-    CURRICULUM_SWITCH_EPISODE,
 )
 
 
@@ -96,6 +102,7 @@ RED_AGENT_MAP = {
 
 def set_seed(seed):
 
+    random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
 
@@ -108,9 +115,66 @@ def set_seed(seed):
 ############################################################
 
 def pad_observation(obs, real_dim):
+    """
+    Place a possibly-shorter agent observation into the fixed
+    OBS_DIM buffer gnn_attention.py._split_entities() expects:
+
+        [ mission | subnet_block_0 .. subnet_block_{NUM_HQ_SUBNETS-1} | messages ]
+
+    Per BlueFlatWrapper._get_init_obs_spaces(), only the HQ agent
+    (blue_agent_4) actually has NUM_HQ_SUBNETS subnet blocks in its
+    raw observation -- pad_spaces defaults to False and EnterpriseMAE
+    never overrides it, so every other agent's raw observation is:
+
+        [ mission | subnet_block_0 | messages ]
+
+    i.e. messages sit immediately after however many real subnet
+    blocks that agent has (1, here), NOT after NUM_HQ_SUBNETS of
+    them. A naive np.zeros(...) + front-fill puts those real
+    messages where subnet_block_1 is expected, and puts zeros where
+    messages are expected -- silently deleting communication content
+    for every agent except the HQ one. This reassembles instead:
+    real subnet blocks go into the first k slots (zero-filling the
+    remaining NUM_HQ_SUBNETS - k), and messages always go into the
+    fixed tail position regardless of k.
+    """
 
     padded = np.zeros(OBS_DIM, dtype=np.float32)
-    padded[:real_dim] = obs
+
+    if real_dim == OBS_DIM:
+        # Already the full [mission | NUM_HQ_SUBNETS blocks | messages]
+        # layout (the HQ agent) -- nothing to reassemble.
+        padded[:] = obs
+        return padded
+
+    num_real_blocks, remainder = divmod(
+        real_dim - MISSION_DIM - MESSAGE_DIM,
+        SUBNET_BLOCK_DIM,
+    )
+
+    if remainder != 0 or not (0 <= num_real_blocks <= NUM_HQ_SUBNETS):
+        raise ValueError(
+            f"Observation length {real_dim} does not decompose into "
+            f"mission + k*SUBNET_BLOCK_DIM + messages for any integer "
+            f"k in [0, {NUM_HQ_SUBNETS}] -- pad_observation's layout "
+            f"assumption no longer matches the environment."
+        )
+
+    # Mission
+    padded[:MISSION_DIM] = obs[:MISSION_DIM]
+
+    # Real subnet blocks -> first num_real_blocks slots. The
+    # remaining (NUM_HQ_SUBNETS - num_real_blocks) slots stay zero.
+    real_blocks_end = MISSION_DIM + num_real_blocks * SUBNET_BLOCK_DIM
+    padded[MISSION_DIM:real_blocks_end] = obs[MISSION_DIM:real_blocks_end]
+
+    # Messages -> fixed tail position, wherever they actually sit in
+    # the (shorter) source observation.
+    tail_start = MISSION_DIM + NUM_HQ_SUBNETS * SUBNET_BLOCK_DIM
+    padded[tail_start:tail_start + MESSAGE_DIM] = obs[
+        real_dim - MESSAGE_DIM:real_dim
+    ]
+
     return padded
 
 ############################################################
@@ -337,7 +401,6 @@ def train():
     )
 
     obs_dims = env.get_observation_dims()
-    action_dims = env.get_action_dims()
 
     # Adaptive Action Mask replaces the old static per-episode mask
     # (see action_mask.py). Masks are now computed fresh every
@@ -375,9 +438,6 @@ def train():
     ########################################################
     # Runtime communication state
     ########################################################
-
-    # previous_messages = None
-    # previous_obs_array = None
 
     previous_messages = None
     previous_obs_array = None
@@ -649,6 +709,14 @@ def train():
             current_red_agent = get_curriculum_stage(episode_count)
             env = CC4Env(red_agent_class=current_red_agent)
 
+            # Recreating CC4Env gives a fresh instance -- refresh the
+            # metadata derived from it too, in case anything about
+            # agent list/observation shape ever varies across
+            # instances (currently believed constant across red-agent
+            # choices, but cheap to keep in sync rather than assume).
+            agent_names = sorted(env.possible_agents)
+            obs_dims = env.get_observation_dims()
+
             team_return = episode_return.sum()
             episode_returns_log.append(team_return)
             episode_return_history.append(team_return)
@@ -682,10 +750,8 @@ def train():
             # episode.
             # ------------------------------------------------
 
-            # previous_messages = None
-            # previous_obs_array = None
-
-            # obs_dict, info = env.reset(seed=SEED + episode_count)
+            previous_messages = None
+            previous_obs_array = None
             previous_field_ids = None
             previous_comm_log_probs = None
             previous_comm_entropies = None
@@ -774,7 +840,6 @@ def train():
     plt.ylabel("Entropy")
     plt.grid()
     plt.savefig(os.path.join(LOG_DIR, "entropy.png"))
-
 
 if __name__ == "__main__":
     train()

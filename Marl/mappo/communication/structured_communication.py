@@ -747,5 +747,4 @@ class StructuredCommunication(nn.Module):
 
     def get_num_agents(self) -> int:
         """Return the number of communicating agents."""
-
         return self.num_agents

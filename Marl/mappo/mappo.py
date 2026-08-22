@@ -74,6 +74,7 @@ from .config import (
     UPDATE_EPOCHS,
     MINIBATCH_SIZE,
     PPO_CLIP,
+    VALUE_CLIP,
     VALUE_LOSS_COEF,
     ENTROPY_COEF,
     NORMALIZE_ADVANTAGES,
@@ -946,22 +947,11 @@ class MAPPO:
             )
 
         # ----------------------------------------------------------
-        # Generate sender hidden representations
-        #
-        # [B, N, OBS]
-        #       ↓
-        # [B*N, OBS]
-        #
-        # This is the CURRENT sender network.
-        #
-        # No detach()
-        # No no_grad()
+        # Sender field IDs are the already-sampled rollout actions
+        # (fixed). Only the encoder runs here -- the decoder/actor
+        # recompute happens separately in evaluate_actions() for the
+        # communication_log_probs / communication_entropy PPO terms.
         # ----------------------------------------------------------
-
-        sender_obs = source_obs.reshape(
-            batch_size * NUM_AGENTS,
-            OBS_DIM,
-        )
 
         # sender_hidden = (
         #     self.actor.get_local_hidden(
@@ -1540,6 +1530,8 @@ class MAPPO:
 
         action_masks = batch["action_masks"]
 
+        old_values = batch["values"]
+
         # ======================================================
         # Communication tensors
         # ======================================================
@@ -1605,6 +1597,10 @@ class MAPPO:
         )
 
         advantages = advantages.reshape(
+            T * NUM_AGENTS,
+        )
+
+        old_values = old_values.reshape(
             T * NUM_AGENTS,
         )
         communication_field_ids = (
@@ -1853,6 +1849,10 @@ class MAPPO:
                     advantages[idx]
                 )
 
+                mb_old_values = (
+                    old_values[idx]
+                )
+
                 mb_action_masks = (
                     action_masks[idx]
                 )
@@ -2092,11 +2092,54 @@ class MAPPO:
                     * mb_advantages.view(-1, 1)
                 )
 
+                # --------------------------------------------------
+                # Mask (a) invalid communication rows (episode-start
+                # placeholder field-ids / anything communication_valid
+                # =False), AND (b) self-communication -- sender ==
+                # receiver never actually reaches this receiver's
+                # decision (it's zeroed out of received_messages in
+                # _reconstruct_received_messages), so it shouldn't be
+                # policy-gradient-updated using this row's advantage
+                # either.
+                #
+                # mb_agent_ids: [B]        -> this row's receiver id
+                # comm_surrogate*: [B, N]  -> N = sender dim
+                # --------------------------------------------------
+
+                sender_index = torch.arange(
+                    NUM_AGENTS,
+                    device=self.device,
+                ).view(1, -1)
+
+                not_self_mask = (
+                    sender_index
+                    != mb_agent_ids.view(-1, 1)
+                ).to(dtype=comm_surrogate1.dtype)
+
+                if mb_comm_valid is not None:
+
+                    comm_mask = (
+                        not_self_mask
+                        * mb_comm_valid
+                        .to(dtype=comm_surrogate1.dtype)
+                        .view(-1, 1)
+                    )
+
+                else:
+
+                    comm_mask = not_self_mask
+
+                comm_valid_count = comm_mask.sum().clamp(min=1.0)
+
                 communication_actor_loss = (
-                    -torch.min(
-                        comm_surrogate1,
-                        comm_surrogate2,
-                    ).mean()
+                    -(
+                        torch.min(
+                            comm_surrogate1,
+                            comm_surrogate2,
+                        )
+                        * comm_mask
+                    ).sum()
+                    / comm_valid_count
                 )
                 # ==================================================
                 # Clipped objective
@@ -2131,17 +2174,80 @@ class MAPPO:
                 # Critic loss
                 # ==================================================
 
-                critic_loss = F.mse_loss(
-                    values,
-                    normalized_returns,
-                )
+                if VALUE_CLIP:
+
+                    # `values` (current critic forward pass) and
+                    # `normalized_returns` live in the value_norm
+                    # NORMALIZED space. The buffer's stored old
+                    # values are DENORMALIZED (select_action() calls
+                    # value_norm.denormalize() before returning them
+                    # for storage/logging), so they have to be
+                    # renormalized before the clip range is
+                    # meaningful -- otherwise PPO_CLIP is comparing
+                    # deltas across two different scales.
+                    if self.value_norm is not None:
+
+                        mb_old_values_for_clip = (
+                            self.value_norm.normalize(
+                                mb_old_values
+                            )
+                        )
+
+                    else:
+
+                        mb_old_values_for_clip = mb_old_values
+
+                    value_clipped = (
+                        mb_old_values_for_clip
+                        + torch.clamp(
+                            values - mb_old_values_for_clip,
+                            -PPO_CLIP,
+                            PPO_CLIP,
+                        )
+                    )
+
+                    value_loss_unclipped = (
+                        values - normalized_returns
+                    ).pow(2)
+
+                    value_loss_clipped = (
+                        value_clipped - normalized_returns
+                    ).pow(2)
+
+                    critic_loss = (
+                        0.5
+                        * torch.max(
+                            value_loss_unclipped,
+                            value_loss_clipped,
+                        ).mean()
+                    )
+
+                else:
+
+                    critic_loss = F.mse_loss(
+                        values,
+                        normalized_returns,
+                    )
 
                 # ==================================================
                 # Entropy
                 # ==================================================
 
+                comm_entropy_mask = comm_mask.to(
+                    dtype=communication_entropy.dtype
+                )
+
+                comm_entropy_valid_count = (
+                    comm_entropy_mask.sum().clamp(min=1.0)
+                )
+
+                communication_entropy_mean = (
+                    (communication_entropy * comm_entropy_mask).sum()
+                    / comm_entropy_valid_count
+                )
+
                 entropy_loss = (
-                    entropy.mean() + communication_entropy.mean()
+                    entropy.mean() + communication_entropy_mean
                 )
 
                 # ==================================================
